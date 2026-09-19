@@ -5,7 +5,6 @@
 #include "freertos/semphr.h"
 #include "freertos/event_groups.h"
 #include "driver/gpio.h"
-#include "driver/adc.h"
 
 #include "config.h"
 #include "sensor_data.h"
@@ -19,11 +18,15 @@ void vSensorReadTask(void *pvParameters) {
     gpio_reset_pin(PIR_PIN);
     gpio_set_direction(PIR_PIN, GPIO_MODE_INPUT);
 
+    // Configure LDR pin as input
+    gpio_reset_pin(LDR_PIN);
+    gpio_set_direction(LDR_PIN, GPIO_MODE_INPUT);
+
     while (1) {
         // Mock readings for simulation testing
         data.temperature = 25.5f;
         data.humidity = 60.0f;
-        data.light_level = adc1_get_raw(ADC1_CHANNEL_6); // Pin 34
+        data.light_level = gpio_get_level(LDR_PIN) * 2000; // Simulated light reading
         data.motion_detected = (gpio_get_level(PIR_PIN) == 1);
 
         // Signal event group if motion is detected
