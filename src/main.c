@@ -11,7 +11,7 @@
 
 QueueHandle_t xSensorQueue = NULL;
 QueueHandle_t xAlarmQueue = NULL;
-SemaphoreHandle_t xOledMutex = NULL;
+SemaphoreHandle_t xSerialMutex = NULL;
 EventGroupHandle_t xSystemEventGroup = NULL;
 
 void app_main(void) {
@@ -19,18 +19,21 @@ void app_main(void) {
 
     xSensorQueue = xQueueCreate(SENSOR_QUEUE_LEN, sizeof(sensor_data_t));
     xAlarmQueue = xQueueCreate(SENSOR_QUEUE_LEN, sizeof(sensor_data_t));
-    xOledMutex = xSemaphoreCreateMutex();
+    xSerialMutex = xSemaphoreCreateMutex();
     xSystemEventGroup = xEventGroupCreate();
 
     if (xSensorQueue != NULL && xAlarmQueue != NULL &&
-        xOledMutex != NULL && xSystemEventGroup != NULL) {
+        xSerialMutex != NULL && xSystemEventGroup != NULL) {
 
         xTaskCreate(vSensorReadTask, "SensorReadTask", TASK_STACK_SIZE, NULL, 2, NULL);
         xTaskCreate(vDisplayTask,    "DisplayTask",    TASK_STACK_SIZE, NULL, 2, NULL);
         xTaskCreate(vAlarmTask,      "AlarmTask",      TASK_STACK_SIZE, NULL, 3, NULL);
         xTaskCreate(vInputTask,      "InputTask",      TASK_STACK_SIZE, NULL, 1, NULL);
 
-        printf("All FreeRTOS tasks successfully created!\n");
+        if (xSemaphoreTake(xSerialMutex, portMAX_DELAY) == pdTRUE) {
+            printf("All FreeRTOS tasks successfully created!\n");
+            xSemaphoreGive(xSerialMutex);
+        }
     } else {
         printf("Error: Failed to create FreeRTOS queues/mutexes.\n");
     }

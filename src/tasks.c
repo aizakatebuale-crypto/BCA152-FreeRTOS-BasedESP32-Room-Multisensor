@@ -74,7 +74,10 @@ void vSensorReadTask(void *pvParameters) {
             xQueueSend(xSensorQueue, &data, pdMS_TO_TICKS(100));
             xQueueSend(xAlarmQueue, &data, pdMS_TO_TICKS(100));
         } else {
-            printf("DHT22 read failed: %s\n", esp_err_to_name(err));
+            if (xSemaphoreTake(xSerialMutex, portMAX_DELAY) == pdTRUE) {
+                printf("DHT22 read failed: %s\n", esp_err_to_name(err));
+                xSemaphoreGive(xSerialMutex);
+            }
         }
 
         vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(2000));
@@ -87,7 +90,7 @@ void vDisplayTask(void *pvParameters) {
     while (1) {
         if (xQueueReceive(xSensorQueue, &received_data, portMAX_DELAY) == pdTRUE) {
 
-            if (xSemaphoreTake(xOledMutex, portMAX_DELAY) == pdTRUE) {
+            if (xSemaphoreTake(xSerialMutex, portMAX_DELAY) == pdTRUE) {
                 printf("\n--- ROOM MONITORING STATUS ---\n");
                 printf("Temp: %.1f C | Humidity: %.1f %%\n", received_data.temperature, received_data.humidity);
                 printf("Light Level: %d | Motion: %s\n",
@@ -95,7 +98,7 @@ void vDisplayTask(void *pvParameters) {
                        received_data.motion_detected ? "DETECTED!" : "CLEAR");
                 printf("-------------------------------\n");
 
-                xSemaphoreGive(xOledMutex);
+                xSemaphoreGive(xSerialMutex);
             }
         }
     }
@@ -120,7 +123,10 @@ void vAlarmTask(void *pvParameters) {
             }
 
             if (state != last_state) {
-                printf("ALARM state: %s (%.1f C)\n", alarm_state_name(state), data.temperature);
+                if (xSemaphoreTake(xSerialMutex, portMAX_DELAY) == pdTRUE) {
+                    printf("ALARM state: %s (%.1f C)\n", alarm_state_name(state), data.temperature);
+                    xSemaphoreGive(xSerialMutex);
+                }
                 last_state = state;
             }
         }
