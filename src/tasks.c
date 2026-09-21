@@ -12,15 +12,17 @@
 
 void vSensorReadTask(void *pvParameters) {
     sensor_data_t data;
-    
+
     gpio_reset_pin(PIR_PIN);
     gpio_set_direction(PIR_PIN, GPIO_MODE_INPUT);
 
     gpio_reset_pin(LDR_PIN);
     gpio_set_direction(LDR_PIN, GPIO_MODE_INPUT);
 
+    TickType_t lastWakeTime = xTaskGetTickCount();
+
     while (1) {
-        
+
         data.temperature = 25.5f;
         data.humidity = 60.0f;
         data.light_level = gpio_get_level(LDR_PIN) * 2000; // Simulated light reading
@@ -32,13 +34,11 @@ void vSensorReadTask(void *pvParameters) {
             xEventGroupClearBits(xSystemEventGroup, BIT_MOTION_DETECTED);
         }
 
-        
         xQueueSend(xSensorQueue, &data, portMAX_DELAY);
 
-        vTaskDelay(pdMS_TO_TICKS(2000)); // Read every 2 seconds
+        vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(2000)); // Read every 2 seconds
     }
 }
-
 
 void vDisplayTask(void *pvParameters) {
     sensor_data_t received_data;
