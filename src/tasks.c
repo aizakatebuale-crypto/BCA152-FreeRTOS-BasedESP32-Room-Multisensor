@@ -11,17 +11,16 @@
 #include "sensor_data.h"
 #include "tasks.h"
 #include "dht22.h"
+#include "ldr.h"
 
 void vSensorReadTask(void *pvParameters) {
     sensor_data_t data;
 
     dht22_init(DHT_PIN);
+    ldr_init();
 
     gpio_reset_pin(PIR_PIN);
     gpio_set_direction(PIR_PIN, GPIO_MODE_INPUT);
-
-    gpio_reset_pin(LDR_PIN);
-    gpio_set_direction(LDR_PIN, GPIO_MODE_INPUT);
 
     TickType_t lastWakeTime = xTaskGetTickCount();
 
@@ -32,7 +31,7 @@ void vSensorReadTask(void *pvParameters) {
         if (err == ESP_OK) {
             data.temperature = temperature;
             data.humidity = humidity;
-            data.light_level = gpio_get_level(LDR_PIN) * 2000; // still placeholder, ADC next
+            data.light_level = ldr_read_percent();
             data.motion_detected = (gpio_get_level(PIR_PIN) == 1);
 
             if (data.motion_detected) {
