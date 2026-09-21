@@ -28,5 +28,5 @@ int ldr_read_percent(void)
     if (adc_oneshot_read(s_adc_handle, LDR_ADC_CHANNEL, &raw) != ESP_OK) {
         return -1;
     }
-    return (raw * 100) / ADC_MAX_RAW;
+    return 100 - (raw * 100) / ADC_MAX_RAW;
 }
