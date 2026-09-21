@@ -3,6 +3,8 @@
 
 #include <stdbool.h>
 
+#define INACTIVITY_TIMEOUT_SECONDS 15
+
 typedef enum {
     STATE_ACTIVE,
     STATE_INACTIVE

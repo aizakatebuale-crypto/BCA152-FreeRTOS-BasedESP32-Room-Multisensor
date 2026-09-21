@@ -6,7 +6,7 @@ SystemState evaluateSystemState(SystemState currentState, bool motionDetected, i
         return STATE_ACTIVE;
     }
 
-    if (currentState == STATE_ACTIVE && inactiveSeconds >= 15) {
+    if (currentState == STATE_ACTIVE && inactiveSeconds >= INACTIVITY_TIMEOUT_SECONDS) {
         return STATE_INACTIVE;
     }
 
