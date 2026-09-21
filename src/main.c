@@ -25,10 +25,14 @@ void app_main(void) {
     if (xSensorQueue != NULL && xAlarmQueue != NULL &&
         xSerialMutex != NULL && xSystemEventGroup != NULL) {
 
+        xEventGroupSetBits(xSystemEventGroup, BIT_SYSTEM_ACTIVE);
+
         xTaskCreate(vSensorReadTask, "SensorReadTask", TASK_STACK_SIZE, NULL, 2, NULL);
         xTaskCreate(vDisplayTask,    "DisplayTask",    TASK_STACK_SIZE, NULL, 2, NULL);
         xTaskCreate(vAlarmTask,      "AlarmTask",      TASK_STACK_SIZE, NULL, 3, NULL);
         xTaskCreate(vInputTask,      "InputTask",      TASK_STACK_SIZE, NULL, 1, NULL);
+        xTaskCreate(vMotionTask,     "MotionTask",     TASK_STACK_SIZE, NULL, 3, NULL);
+        xTaskCreate(vStateTask,      "StateTask",      TASK_STACK_SIZE, NULL, 2, NULL);
 
         if (xSemaphoreTake(xSerialMutex, portMAX_DELAY) == pdTRUE) {
             printf("All FreeRTOS tasks successfully created!\n");

@@ -15,6 +15,7 @@
 #include "dht22.h"
 #include "ldr.h"
 #include "alarm_logic.h"
+#include "system_state.h"
 
 static void buzzer_init(void)
 {
@@ -50,9 +51,6 @@ void vSensorReadTask(void *pvParameters) {
     dht22_init(DHT_PIN);
     ldr_init();
 
-    gpio_reset_pin(PIR_PIN);
-    gpio_set_direction(PIR_PIN, GPIO_MODE_INPUT);
-
     TickType_t lastWakeTime = xTaskGetTickCount();
 
     while (1) {
@@ -60,16 +58,12 @@ void vSensorReadTask(void *pvParameters) {
         esp_err_t err = dht22_read(DHT_PIN, &temperature, &humidity);
 
         if (err == ESP_OK) {
+            EventBits_t bits = xEventGroupGetBits(xSystemEventGroup);
+
             data.temperature = temperature;
             data.humidity = humidity;
             data.light_level = ldr_read_percent();
-            data.motion_detected = (gpio_get_level(PIR_PIN) == 1);
-
-            if (data.motion_detected) {
-                xEventGroupSetBits(xSystemEventGroup, BIT_MOTION_DETECTED);
-            } else {
-                xEventGroupClearBits(xSystemEventGroup, BIT_MOTION_DETECTED);
-            }
+            data.motion_detected = (bits & BIT_MOTION_DETECTED) != 0;
 
             xQueueSend(xSensorQueue, &data, pdMS_TO_TICKS(100));
             xQueueSend(xAlarmQueue, &data, pdMS_TO_TICKS(100));
@@ -89,6 +83,11 @@ void vDisplayTask(void *pvParameters) {
 
     while (1) {
         if (xQueueReceive(xSensorQueue, &received_data, portMAX_DELAY) == pdTRUE) {
+            EventBits_t bits = xEventGroupGetBits(xSystemEventGroup);
+
+            if ((bits & BIT_SYSTEM_ACTIVE) == 0) {
+                continue;
+            }
 
             if (xSemaphoreTake(xSerialMutex, portMAX_DELAY) == pdTRUE) {
                 printf("\n--- ROOM MONITORING STATUS ---\n");
@@ -113,10 +112,12 @@ void vAlarmTask(void *pvParameters) {
     while (1) {
         if (xQueueReceive(xAlarmQueue, &data, portMAX_DELAY) == pdTRUE) {
             alarm_state_t state = evaluate_temperature(data.temperature);
+            EventBits_t bits = xEventGroupGetBits(xSystemEventGroup);
+            bool system_active = (bits & BIT_SYSTEM_ACTIVE) != 0;
 
             if (state != ALARM_NORMAL) {
                 xEventGroupSetBits(xSystemEventGroup, BIT_ALERT_TRIGGERED);
-                buzzer_set(true);
+                buzzer_set(system_active);
             } else {
                 xEventGroupClearBits(xSystemEventGroup, BIT_ALERT_TRIGGERED);
                 buzzer_set(false);
@@ -130,6 +131,60 @@ void vAlarmTask(void *pvParameters) {
                 last_state = state;
             }
         }
+    }
+}
+
+void vMotionTask(void *pvParameters) {
+    gpio_reset_pin(PIR_PIN);
+    gpio_set_direction(PIR_PIN, GPIO_MODE_INPUT);
+
+    TickType_t lastWakeTime = xTaskGetTickCount();
+
+    while (1) {
+        if (gpio_get_level(PIR_PIN) == 1) {
+            xEventGroupSetBits(xSystemEventGroup, BIT_MOTION_DETECTED);
+        } else {
+            xEventGroupClearBits(xSystemEventGroup, BIT_MOTION_DETECTED);
+        }
+
+        vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(MOTION_POLL_MS));
+    }
+}
+
+void vStateTask(void *pvParameters) {
+    SystemState state = STATE_ACTIVE;
+    int inactive_ms = 0;
+
+    TickType_t lastWakeTime = xTaskGetTickCount();
+
+    while (1) {
+        EventBits_t bits = xEventGroupGetBits(xSystemEventGroup);
+        bool motion = (bits & BIT_MOTION_DETECTED) != 0;
+
+        if (motion) {
+            inactive_ms = 0;
+        } else if (inactive_ms < INACTIVITY_TIMEOUT_SECONDS * 1000) {
+            inactive_ms += STATE_CHECK_MS;
+        }
+
+        SystemState next = evaluateSystemState(state, motion, inactive_ms / 1000);
+
+        if (next != state) {
+            if (next == STATE_ACTIVE) {
+                xEventGroupSetBits(xSystemEventGroup, BIT_SYSTEM_ACTIVE);
+            } else {
+                xEventGroupClearBits(xSystemEventGroup, BIT_SYSTEM_ACTIVE);
+            }
+
+            if (xSemaphoreTake(xSerialMutex, portMAX_DELAY) == pdTRUE) {
+                printf("SYSTEM state: %s\n", next == STATE_ACTIVE ? "ACTIVE" : "INACTIVE");
+                xSemaphoreGive(xSerialMutex);
+            }
+
+            state = next;
+        }
+
+        vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(STATE_CHECK_MS));
     }
 }
 
