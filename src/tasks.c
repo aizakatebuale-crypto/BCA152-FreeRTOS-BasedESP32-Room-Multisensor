@@ -1,10 +1,12 @@
 #include <stdio.h>
+#include <stdbool.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
 #include "freertos/event_groups.h"
 #include "driver/gpio.h"
+#include "driver/ledc.h"
 #include "esp_err.h"
 
 #include "config.h"
@@ -12,6 +14,35 @@
 #include "tasks.h"
 #include "dht22.h"
 #include "ldr.h"
+#include "alarm_logic.h"
+
+static void buzzer_init(void)
+{
+    ledc_timer_config_t timer_cfg = {
+        .speed_mode = LEDC_LOW_SPEED_MODE,
+        .duty_resolution = LEDC_TIMER_10_BIT,
+        .timer_num = LEDC_TIMER_0,
+        .freq_hz = 2000,
+        .clk_cfg = LEDC_AUTO_CLK,
+    };
+    ledc_timer_config(&timer_cfg);
+
+    ledc_channel_config_t channel_cfg = {
+        .gpio_num = BUZZER_PIN,
+        .speed_mode = LEDC_LOW_SPEED_MODE,
+        .channel = LEDC_CHANNEL_0,
+        .timer_sel = LEDC_TIMER_0,
+        .duty = 0,
+        .hpoint = 0,
+    };
+    ledc_channel_config(&channel_cfg);
+}
+
+static void buzzer_set(bool on)
+{
+    ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, on ? 512 : 0);
+    ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0);
+}
 
 void vSensorReadTask(void *pvParameters) {
     sensor_data_t data;
@@ -40,7 +71,8 @@ void vSensorReadTask(void *pvParameters) {
                 xEventGroupClearBits(xSystemEventGroup, BIT_MOTION_DETECTED);
             }
 
-            xQueueSend(xSensorQueue, &data, portMAX_DELAY);
+            xQueueSend(xSensorQueue, &data, pdMS_TO_TICKS(100));
+            xQueueSend(xAlarmQueue, &data, pdMS_TO_TICKS(100));
         } else {
             printf("DHT22 read failed: %s\n", esp_err_to_name(err));
         }
@@ -70,27 +102,27 @@ void vDisplayTask(void *pvParameters) {
 }
 
 void vAlarmTask(void *pvParameters) {
-    gpio_reset_pin(BUZZER_PIN);
-    gpio_set_direction(BUZZER_PIN, GPIO_MODE_OUTPUT);
+    sensor_data_t data;
+    alarm_state_t last_state = ALARM_NORMAL;
+
+    buzzer_init();
 
     while (1) {
+        if (xQueueReceive(xAlarmQueue, &data, portMAX_DELAY) == pdTRUE) {
+            alarm_state_t state = evaluate_temperature(data.temperature);
 
-        EventBits_t bits = xEventGroupWaitBits(
-            xSystemEventGroup,
-            BIT_MOTION_DETECTED,
-            pdFALSE,
-            pdFALSE,
-            portMAX_DELAY
-        );
+            if (state != ALARM_NORMAL) {
+                xEventGroupSetBits(xSystemEventGroup, BIT_ALERT_TRIGGERED);
+                buzzer_set(true);
+            } else {
+                xEventGroupClearBits(xSystemEventGroup, BIT_ALERT_TRIGGERED);
+                buzzer_set(false);
+            }
 
-        if (bits & BIT_MOTION_DETECTED) {
-            gpio_set_level(BUZZER_PIN, 1);
-            vTaskDelay(pdMS_TO_TICKS(100));
-            gpio_set_level(BUZZER_PIN, 0);
-            vTaskDelay(pdMS_TO_TICKS(100));
-        } else {
-            gpio_set_level(BUZZER_PIN, 0);
-            vTaskDelay(pdMS_TO_TICKS(500));
+            if (state != last_state) {
+                printf("ALARM state: %s (%.1f C)\n", alarm_state_name(state), data.temperature);
+                last_state = state;
+            }
         }
     }
 }

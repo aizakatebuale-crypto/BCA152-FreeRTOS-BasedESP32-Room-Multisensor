@@ -10,6 +10,7 @@
 #include "tasks.h"
 
 QueueHandle_t xSensorQueue = NULL;
+QueueHandle_t xAlarmQueue = NULL;
 SemaphoreHandle_t xOledMutex = NULL;
 EventGroupHandle_t xSystemEventGroup = NULL;
 
@@ -17,11 +18,13 @@ void app_main(void) {
     printf("Starting FreeRTOS Multisensor Monitoring System...\n");
 
     xSensorQueue = xQueueCreate(SENSOR_QUEUE_LEN, sizeof(sensor_data_t));
+    xAlarmQueue = xQueueCreate(SENSOR_QUEUE_LEN, sizeof(sensor_data_t));
     xOledMutex = xSemaphoreCreateMutex();
     xSystemEventGroup = xEventGroupCreate();
 
-    if (xSensorQueue != NULL && xOledMutex != NULL && xSystemEventGroup != NULL) {
-        
+    if (xSensorQueue != NULL && xAlarmQueue != NULL &&
+        xOledMutex != NULL && xSystemEventGroup != NULL) {
+
         xTaskCreate(vSensorReadTask, "SensorReadTask", TASK_STACK_SIZE, NULL, 2, NULL);
         xTaskCreate(vDisplayTask,    "DisplayTask",    TASK_STACK_SIZE, NULL, 2, NULL);
         xTaskCreate(vAlarmTask,      "AlarmTask",      TASK_STACK_SIZE, NULL, 3, NULL);

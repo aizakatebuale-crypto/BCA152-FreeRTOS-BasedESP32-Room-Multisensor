@@ -15,6 +15,7 @@ typedef struct {
 } sensor_data_t;
 
 extern QueueHandle_t xSensorQueue;
+extern QueueHandle_t xAlarmQueue;
 extern SemaphoreHandle_t xOledMutex;
 extern EventGroupHandle_t xSystemEventGroup;
 
