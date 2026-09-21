@@ -14,7 +14,7 @@
 #include "tasks.h"
 #include "dht22.h"
 #include "ldr.h"
-#include "alarm_logic.h"
+#include "alarm.h"
 #include "system_state.h"
 
 static void buzzer_init(void)
@@ -105,13 +105,13 @@ void vDisplayTask(void *pvParameters) {
 
 void vAlarmTask(void *pvParameters) {
     sensor_data_t data;
-    alarm_state_t last_state = ALARM_NORMAL;
+    AlarmState last_state = ALARM_NORMAL;
 
     buzzer_init();
 
     while (1) {
         if (xQueueReceive(xAlarmQueue, &data, portMAX_DELAY) == pdTRUE) {
-            alarm_state_t state = evaluate_temperature(data.temperature);
+            AlarmState state = evaluateTemperature(data.temperature);
             EventBits_t bits = xEventGroupGetBits(xSystemEventGroup);
             bool system_active = (bits & BIT_SYSTEM_ACTIVE) != 0;
 
@@ -125,7 +125,7 @@ void vAlarmTask(void *pvParameters) {
 
             if (state != last_state) {
                 if (xSemaphoreTake(xSerialMutex, portMAX_DELAY) == pdTRUE) {
-                    printf("ALARM state: %s (%.1f C)\n", alarm_state_name(state), data.temperature);
+                    printf("ALARM state: %s (%.1f C)\n", alarmStateName(state), data.temperature);
                     xSemaphoreGive(xSerialMutex);
                 }
                 last_state = state;
