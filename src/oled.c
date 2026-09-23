@@ -14,7 +14,7 @@ static uint8_t s_framebuffer[OLED_WIDTH * OLED_PAGES];
 
 static esp_err_t oled_cmd(uint8_t cmd)
 {
-    uint8_t buf[2] = { 0x00, cmd };
+    const uint8_t buf[2] = { 0x00, cmd };
     return i2c_master_transmit(s_dev, buf, 2, 100);
 }
 

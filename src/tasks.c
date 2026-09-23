@@ -257,9 +257,10 @@ void vInputTask(void *pvParameters) {
 
             if (clkState != lastClkState && clkState == 0) {
                 int dtState = gpio_get_level(ENCODER_DT);
-                DisplayMode newMode;
+
 
                 if (xSemaphoreTake(xDisplayModeMutex, portMAX_DELAY) == pdTRUE) {
+                    DisplayMode newMode;
                     if (dtState != clkState) {
                         newMode = nextDisplayMode(currentDisplayMode);
                     } else {
