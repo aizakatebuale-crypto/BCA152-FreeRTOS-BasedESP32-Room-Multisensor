@@ -6,6 +6,7 @@
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
 #include "freertos/event_groups.h"
+#include "input.h"
 
 typedef struct {
     float temperature;
@@ -18,5 +19,8 @@ extern QueueHandle_t xSensorQueue;
 extern QueueHandle_t xAlarmQueue;
 extern SemaphoreHandle_t xSerialMutex;
 extern EventGroupHandle_t xSystemEventGroup;
+
+extern volatile DisplayMode currentDisplayMode;
+extern SemaphoreHandle_t xDisplayModeMutex;
 
 #endif

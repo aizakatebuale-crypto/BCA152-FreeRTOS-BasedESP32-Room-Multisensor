@@ -16,6 +16,7 @@
 #include "ldr.h"
 #include "alarm.h"
 #include "system_state.h"
+#include "input.h"
 
 static void buzzer_init(void)
 {
@@ -43,6 +44,17 @@ static void buzzer_set(bool on)
 {
     ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, on ? 512 : 0);
     ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0);
+}
+
+static const char *display_mode_name(DisplayMode mode)
+{
+    switch (mode) {
+    case MODE_TEMP:      return "TEMPERATURE";
+    case MODE_HUMIDITY:  return "HUMIDITY";
+    case MODE_LIGHT:     return "LIGHT";
+    case MODE_MOTION:    return "MOTION";
+    default:             return "UNKNOWN";
+    }
 }
 
 void vSensorReadTask(void *pvParameters) {
@@ -89,12 +101,30 @@ void vDisplayTask(void *pvParameters) {
                 continue;
             }
 
+            DisplayMode mode = MODE_TEMP;
+            if (xSemaphoreTake(xDisplayModeMutex, portMAX_DELAY) == pdTRUE) {
+                mode = currentDisplayMode;
+                xSemaphoreGive(xDisplayModeMutex);
+            }
+
             if (xSemaphoreTake(xSerialMutex, portMAX_DELAY) == pdTRUE) {
-                printf("\n--- ROOM MONITORING STATUS ---\n");
-                printf("Temp: %.1f C | Humidity: %.1f %%\n", received_data.temperature, received_data.humidity);
-                printf("Light Level: %d | Motion: %s\n",
-                       received_data.light_level,
-                       received_data.motion_detected ? "DETECTED!" : "CLEAR");
+                printf("\n--- ROOM MONITOR (%s) ---\n", display_mode_name(mode));
+                switch (mode) {
+                case MODE_TEMP:
+                    printf("Temperature: %.1f C\n", received_data.temperature);
+                    break;
+                case MODE_HUMIDITY:
+                    printf("Humidity: %.1f %%\n", received_data.humidity);
+                    break;
+                case MODE_LIGHT:
+                    printf("Light Level: %d\n", received_data.light_level);
+                    break;
+                case MODE_MOTION:
+                    printf("Motion: %s\n", received_data.motion_detected ? "DETECTED!" : "CLEAR");
+                    break;
+                default:
+                    break;
+                }
                 printf("-------------------------------\n");
 
                 xSemaphoreGive(xSerialMutex);
@@ -189,7 +219,48 @@ void vStateTask(void *pvParameters) {
 }
 
 void vInputTask(void *pvParameters) {
+    gpio_reset_pin(ENCODER_CLK);
+    gpio_set_direction(ENCODER_CLK, GPIO_MODE_INPUT);
+    gpio_set_pull_mode(ENCODER_CLK, GPIO_PULLUP_ONLY);
+
+    gpio_reset_pin(ENCODER_DT);
+    gpio_set_direction(ENCODER_DT, GPIO_MODE_INPUT);
+    gpio_set_pull_mode(ENCODER_DT, GPIO_PULLUP_ONLY);
+
+    int lastClkState = gpio_get_level(ENCODER_CLK);
+
+    TickType_t lastWakeTime = xTaskGetTickCount();
+
     while (1) {
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        EventBits_t bits = xEventGroupGetBits(xSystemEventGroup);
+        bool system_active = (bits & BIT_SYSTEM_ACTIVE) != 0;
+
+        if (system_active) {
+            int clkState = gpio_get_level(ENCODER_CLK);
+
+            if (clkState != lastClkState && clkState == 0) {
+                int dtState = gpio_get_level(ENCODER_DT);
+                DisplayMode newMode;
+
+                if (xSemaphoreTake(xDisplayModeMutex, portMAX_DELAY) == pdTRUE) {
+                    if (dtState != clkState) {
+                        newMode = nextDisplayMode(currentDisplayMode);
+                    } else {
+                        newMode = previousDisplayMode(currentDisplayMode);
+                    }
+                    currentDisplayMode = newMode;
+                    xSemaphoreGive(xDisplayModeMutex);
+
+                    if (xSemaphoreTake(xSerialMutex, portMAX_DELAY) == pdTRUE) {
+                        printf("Display mode: %s\n", display_mode_name(newMode));
+                        xSemaphoreGive(xSerialMutex);
+                    }
+                }
+            }
+
+            lastClkState = clkState;
+        }
+
+        vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(ENCODER_POLL_MS));
     }
 }

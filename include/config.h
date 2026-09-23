@@ -22,8 +22,9 @@
 
 #define TASK_STACK_SIZE 3072
 
-#define MOTION_POLL_MS  100
-#define STATE_CHECK_MS  100
+#define MOTION_POLL_MS   100
+#define STATE_CHECK_MS   100
+#define ENCODER_POLL_MS  10
 
 #define BIT_MOTION_DETECTED (1 << 0)
 #define BIT_ALERT_TRIGGERED (1 << 1)

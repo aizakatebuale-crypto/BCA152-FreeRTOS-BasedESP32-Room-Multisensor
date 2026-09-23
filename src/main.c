@@ -14,6 +14,9 @@ QueueHandle_t xAlarmQueue = NULL;
 SemaphoreHandle_t xSerialMutex = NULL;
 EventGroupHandle_t xSystemEventGroup = NULL;
 
+volatile DisplayMode currentDisplayMode = MODE_TEMP;
+SemaphoreHandle_t xDisplayModeMutex = NULL;
+
 void app_main(void) {
     printf("Starting FreeRTOS Multisensor Monitoring System...\n");
 
@@ -21,9 +24,11 @@ void app_main(void) {
     xAlarmQueue = xQueueCreate(SENSOR_QUEUE_LEN, sizeof(sensor_data_t));
     xSerialMutex = xSemaphoreCreateMutex();
     xSystemEventGroup = xEventGroupCreate();
+    xDisplayModeMutex = xSemaphoreCreateMutex();
 
     if (xSensorQueue != NULL && xAlarmQueue != NULL &&
-        xSerialMutex != NULL && xSystemEventGroup != NULL) {
+        xSerialMutex != NULL && xSystemEventGroup != NULL &&
+        xDisplayModeMutex != NULL) {
 
         xEventGroupSetBits(xSystemEventGroup, BIT_SYSTEM_ACTIVE);
 
