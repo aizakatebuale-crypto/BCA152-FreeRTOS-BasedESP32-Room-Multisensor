@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdbool.h>
+#include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -17,6 +18,7 @@
 #include "alarm.h"
 #include "system_state.h"
 #include "input.h"
+#include "oled.h"
 
 static void buzzer_init(void)
 {
@@ -92,6 +94,9 @@ void vSensorReadTask(void *pvParameters) {
 
 void vDisplayTask(void *pvParameters) {
     sensor_data_t received_data;
+    char line1[20], line2[20], line3[20];
+
+    oled_init(OLED_SDA, OLED_SCL);
 
     while (1) {
         if (xQueueReceive(xSensorQueue, &received_data, portMAX_DELAY) == pdTRUE) {
@@ -107,26 +112,38 @@ void vDisplayTask(void *pvParameters) {
                 xSemaphoreGive(xDisplayModeMutex);
             }
 
-            if (xSemaphoreTake(xSerialMutex, portMAX_DELAY) == pdTRUE) {
-                printf("\n--- ROOM MONITOR (%s) ---\n", display_mode_name(mode));
-                switch (mode) {
-                case MODE_TEMP:
-                    printf("Temperature: %.1f C\n", received_data.temperature);
-                    break;
-                case MODE_HUMIDITY:
-                    printf("Humidity: %.1f %%\n", received_data.humidity);
-                    break;
-                case MODE_LIGHT:
-                    printf("Light Level: %d\n", received_data.light_level);
-                    break;
-                case MODE_MOTION:
-                    printf("Motion: %s\n", received_data.motion_detected ? "DETECTED!" : "CLEAR");
-                    break;
-                default:
-                    break;
-                }
-                printf("-------------------------------\n");
+            strcpy(line1, "ROOM MONITOR");
+            switch (mode) {
+            case MODE_TEMP:
+                strcpy(line2, "TEMPERATURE");
+                snprintf(line3, sizeof(line3), "%.1f C", received_data.temperature);
+                break;
+            case MODE_HUMIDITY:
+                strcpy(line2, "HUMIDITY");
+                snprintf(line3, sizeof(line3), "%.1f %%", received_data.humidity);
+                break;
+            case MODE_LIGHT:
+                strcpy(line2, "LIGHT");
+                snprintf(line3, sizeof(line3), "%d %%", received_data.light_level);
+                break;
+            case MODE_MOTION:
+                strcpy(line2, "MOTION");
+                strcpy(line3, received_data.motion_detected ? "DETECTED!" : "CLEAR");
+                break;
+            default:
+                break;
+            }
 
+            oled_clear();
+            oled_draw_text(0, 0, line1);
+            oled_draw_text(2, 0, line2);
+            oled_draw_text(4, 0, line3);
+            oled_display();
+
+            if (xSemaphoreTake(xSerialMutex, portMAX_DELAY) == pdTRUE) {
+                printf("\n--- ROOM MONITOR (%s) ---\n", line2);
+                printf("%s\n", line3);
+                printf("-------------------------------\n");
                 xSemaphoreGive(xSerialMutex);
             }
         }
