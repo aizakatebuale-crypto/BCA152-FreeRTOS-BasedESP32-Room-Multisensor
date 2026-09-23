@@ -88,20 +88,35 @@ Six FreeRTOS tasks are used by the system. Every task has a distinct role, a pri
  - **DisplayTask (priority 1)** — wait for `xSensorQueue`. Update the OLED with current measurement. Low priority because display updates are not urgent. 
 
  **Data flow between tasks:**
+```
+ +----------------+                    +----------------+
+|  SensorReadTask|----[xSensorQueue]--->  DisplayTask  |
+|  (Priority 2)  |                    |  (Priority 1)  |
+|                |----[xAlarmQueue]---->  AlarmTask    |
++----------------+                    |  (Priority 2)  |
+                                      +----------------+
++----------------+                    +----------------+
+|  MotionTask    |---[BIT_MOTION_DETECTED]---> StateTask |
+|  (Priority 3)  |                    |  (Priority 2)  |
++----------------+                    +----------------+
+                                              |
+                                              | [BIT_SYSTEM_ACTIVE]
+                                              v
+                                      +----------------+
+                                      | DisplayTask,   |
+                                      | InputTask,     |
+                                      | AlarmTask      |
+                                      +----------------+
 
- ```
- SensorReadTask --[xSensorQueue]--> DisplayTask
-                \--[xAlarmQueue] ---> AlarmTask
++----------------+                    +----------------+
+|  InputTask     |---[xDisplayModeMutex]---> DisplayTask |
+|  (Priority 3)  |                    |  (Priority 1)  |
++----------------+                    +----------------+
 
-MotionTask -----[Event: BIT_MOTION_DETECTED]--> StateTask
-
-StateTask ------[Event: BIT_SYSTEM_ACTIVE]----> DisplayTask, InputTask, AlarmTask
-
-AlarmTask ------[Event: BIT_ALERT_TRIGGERED]--> (system-wide signal)
-
-InputTask ------[Mutex: xDisplayModeMutex]----> DisplayTask (shares currentDisplayMode)
-
-All tasks ------[Mutex: xSerialMutex]---------> Serial monitor (shared printf)
++----------------+                    +----------------+
+|  All Tasks     |---[xSerialMutex]-------> Serial      |
+|                |                    |  Monitor       |
++----------------+                    +----------------+
 ```
 
 **Synchronization summary:**
