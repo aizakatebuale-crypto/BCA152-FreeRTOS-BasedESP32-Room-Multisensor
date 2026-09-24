@@ -106,33 +106,9 @@ void vDisplayTask(void *pvParameters) {
                 continue;
             }
 
-            DisplayMode mode = MODE_TEMP;
-            if (xSemaphoreTake(xDisplayModeMutex, portMAX_DELAY) == pdTRUE) {
-                mode = currentDisplayMode;
-                xSemaphoreGive(xDisplayModeMutex);
-            }
-
-            strcpy(line1, "ROOM MONITOR");
-            switch (mode) {
-            case MODE_TEMP:
-                strcpy(line2, "TEMPERATURE");
-                snprintf(line3, sizeof(line3), "%.1f C", received_data.temperature);
-                break;
-            case MODE_HUMIDITY:
-                strcpy(line2, "HUMIDITY");
-                snprintf(line3, sizeof(line3), "%.1f %%", received_data.humidity);
-                break;
-            case MODE_LIGHT:
-                strcpy(line2, "LIGHT");
-                snprintf(line3, sizeof(line3), "%d %%", received_data.light_level);
-                break;
-            case MODE_MOTION:
-                strcpy(line2, "MOTION");
-                strcpy(line3, received_data.motion_detected ? "DETECTED!" : "CLEAR");
-                break;
-            default:
-                break;
-            }
+            snprintf(line1, sizeof(line1), "T:%.1fC H:%.1f%%", received_data.temperature, received_data.humidity);
+            snprintf(line2, sizeof(line2), "Light: %d%%", received_data.light_level);
+            snprintf(line3, sizeof(line3), "Motion: %s", received_data.motion_detected ? "YES" : "NO");
 
             oled_clear();
             oled_draw_text(0, 0, line1);
@@ -141,8 +117,11 @@ void vDisplayTask(void *pvParameters) {
             oled_display();
 
             if (xSemaphoreTake(xSerialMutex, portMAX_DELAY) == pdTRUE) {
-                printf("\n--- ROOM MONITOR (%s) ---\n", line2);
-                printf("%s\n", line3);
+                printf("\n--- ROOM MONITORING STATUS ---\n");
+                printf("Temp: %.1f C | Humidity: %.1f %%\n", received_data.temperature, received_data.humidity);
+                printf("Light Level: %d | Motion: %s\n",
+                       received_data.light_level,
+                       received_data.motion_detected ? "DETECTED!" : "CLEAR");
                 printf("-------------------------------\n");
                 xSemaphoreGive(xSerialMutex);
             }
