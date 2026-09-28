@@ -93,39 +93,84 @@ void vSensorReadTask(void *pvParameters) {
 }
 
 void vDisplayTask(void *pvParameters) {
-    sensor_data_t received_data;
-    char line1[20], line2[20], line3[20];
+    sensor_data_t latest = {0};
+    bool have_data = false;
+    bool blanked = false;
+    DisplayMode shown_mode = MODE_COUNT;
+    char label[20];
+    char value[20];
 
     oled_init(OLED_SDA, OLED_SCL);
 
     while (1) {
-        if (xQueueReceive(xSensorQueue, &received_data, portMAX_DELAY) == pdTRUE) {
-            EventBits_t bits = xEventGroupGetBits(xSystemEventGroup);
+        sensor_data_t received;
+        bool got = (xQueueReceive(xSensorQueue, &received, pdMS_TO_TICKS(50)) == pdTRUE);
 
-            if ((bits & BIT_SYSTEM_ACTIVE) == 0) {
-                continue;
+        if (got) {
+            latest = received;
+            have_data = true;
+        }
+
+        EventBits_t bits = xEventGroupGetBits(xSystemEventGroup);
+        if ((bits & BIT_SYSTEM_ACTIVE) == 0) {
+            if (!blanked) {
+                oled_clear();
+                oled_display();
+                blanked = true;
             }
+            continue;
+        }
 
-            snprintf(line1, sizeof(line1), "T:%.1fC H:%.1f%%", received_data.temperature, received_data.humidity);
-            snprintf(line2, sizeof(line2), "Light: %d%%", received_data.light_level);
-            snprintf(line3, sizeof(line3), "Motion: %s", received_data.motion_detected ? "YES" : "NO");
+        DisplayMode mode = MODE_TEMP;
+        if (xSemaphoreTake(xDisplayModeMutex, portMAX_DELAY) == pdTRUE) {
+            mode = currentDisplayMode;
+            xSemaphoreGive(xDisplayModeMutex);
+        }
 
-            oled_clear();
-            oled_draw_text(0, 0, line1);
-            oled_draw_text(2, 0, line2);
-            oled_draw_text(4, 0, line3);
-            oled_display();
+        bool redraw = got || blanked || (mode != shown_mode);
+        blanked = false;
+        shown_mode = mode;
 
+        if (!have_data || !redraw) {
+            continue;
+        }
+
+        if (got) {
             if (xSemaphoreTake(xSerialMutex, portMAX_DELAY) == pdTRUE) {
                 printf("\n--- ROOM MONITORING STATUS ---\n");
-                printf("Temp: %.1f C | Humidity: %.1f %%\n", received_data.temperature, received_data.humidity);
+                printf("Temp: %.1f C | Humidity: %.1f %%\n", latest.temperature, latest.humidity);
                 printf("Light Level: %d | Motion: %s\n",
-                       received_data.light_level,
-                       received_data.motion_detected ? "DETECTED!" : "CLEAR");
+                       latest.light_level,
+                       latest.motion_detected ? "DETECTED!" : "CLEAR");
                 printf("-------------------------------\n");
                 xSemaphoreGive(xSerialMutex);
             }
         }
+
+        switch (mode) {
+        case MODE_TEMP:
+            strcpy(label, "TEMPERATURE");
+            snprintf(value, sizeof(value), "%.1f C", latest.temperature);
+            break;
+        case MODE_HUMIDITY:
+            strcpy(label, "HUMIDITY");
+            snprintf(value, sizeof(value), "%.1f %%", latest.humidity);
+            break;
+        case MODE_LIGHT:
+            strcpy(label, "LIGHT");
+            snprintf(value, sizeof(value), "%d %%", latest.light_level);
+            break;
+        default:
+            strcpy(label, "MOTION");
+            strcpy(value, latest.motion_detected ? "DETECTED" : "NONE");
+            break;
+        }
+
+        oled_clear();
+        oled_draw_text(0, 0, "ROOM MONITOR");
+        oled_draw_text(2, 0, label);
+        oled_draw_text(4, 0, value);
+        oled_display();
     }
 }
 
